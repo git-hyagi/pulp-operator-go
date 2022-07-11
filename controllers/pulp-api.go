@@ -34,8 +34,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger) (ctrl.Result, error) {
+func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger, channel chan ctrl.Result) {
 
+	log.Info("====> API Controller <====")
 	found := &appsv1.Deployment{}
 	err := r.Get(ctx, types.NamespacedName{Name: pulp.Name + "-api", Namespace: pulp.Namespace}, found)
 
@@ -46,13 +47,12 @@ func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, dep)
 		if err != nil {
 			log.Error(err, "Failed to create new Pulp API Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Pulp API Deployment")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Pulp API Deployment")
-		return ctrl.Result{}, err
+		panic("Failed to get Pulp API Deployment")
 	}
 
 	// Ensure the deployment template spec is as expected
@@ -63,10 +63,9 @@ func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanage
 		found.Spec.Template.Spec = expected_deployment_spec.Template.Spec
 		err = r.Update(ctx, found)
 		if err != nil {
-			log.Error(err, "Error trying to update the API deployment object ... ")
-			return ctrl.Result{}, err
+			panic("Error trying to update the API deployment object ... ")
 		}
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	}
 
 	// Create pulp-server secret
@@ -87,13 +86,12 @@ func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, sec)
 		if err != nil {
 			log.Error(err, "Failed to create new pulp-server secret", "Secret.Namespace", sec.Namespace, "Secret.Name", sec.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new pulp-server secret")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get pulp-server secret")
-		return ctrl.Result{}, err
+		panic("Failed to get pulp-server secret")
 	}
 
 	// Create pulp-db-fields-encryption secret
@@ -107,13 +105,12 @@ func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, dbFields)
 		if err != nil {
 			log.Error(err, "Failed to create new pulp-db-fields-encryption secret", "Secret.Namespace", dbFields.Namespace, "Secret.Name", dbFields.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new pulp-db-fields-encryption secret")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get pulp-db-fields-encryption secret")
-		return ctrl.Result{}, err
+		panic("Failed to get pulp-db-fields-encryption secret")
 	}
 
 	// Create pulp-admin-password secret
@@ -127,13 +124,12 @@ func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, adminPwd)
 		if err != nil {
 			log.Error(err, "Failed to create new pulp-admin-password secret", "Secret.Namespace", adminPwd.Namespace, "Secret.Name", adminPwd.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new pulp-admin-password secret")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get pulp-admin-password secret")
-		return ctrl.Result{}, err
+		panic("Failed to get pulp-admin-password secret")
 	}
 
 	// SERVICE
@@ -147,13 +143,12 @@ func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, newApiSvc)
 		if err != nil {
 			log.Error(err, "Failed to create new API Service", "Service.Namespace", newApiSvc.Namespace, "Service.Name", newApiSvc.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new API Service")
 		}
 		// Service created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get API Service")
-		return ctrl.Result{}, err
+		panic("Failed to get API Service")
 	}
 
 	// Ensure the service spec is as expected
@@ -163,13 +158,12 @@ func (r *PulpReconciler) pulpApiController(ctx context.Context, pulp *repomanage
 		log.Info("The API service has been modified! Reconciling ...")
 		err = r.Update(ctx, serviceAPIObject(pulp.Name, pulp.Namespace))
 		if err != nil {
-			log.Error(err, "Error trying to update the API Service object ... ")
-			return ctrl.Result{}, err
+			panic("Error trying to update the API Service object ... ")
 		}
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	}
-
-	return ctrl.Result{}, nil
+	log.Info("<==== API Controller ====>")
+	channel <- ctrl.Result{}
 }
 
 // deploymentForPulpApi returns a pulp-api Deployment object

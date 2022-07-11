@@ -2,8 +2,10 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -32,4 +34,18 @@ func (r *PulpReconciler) retrieveSecretData(ctx context.Context, secretName, sec
 	}
 
 	return secret, nil
+}
+
+// https://github.com/golang/go/issues/20161#issuecomment-561560657
+func SafeGo(log logr.Logger, f func()) {
+	go func() {
+		defer func() {
+			if panicMessage := recover(); panicMessage != nil {
+				err := fmt.Errorf("Panic: %v", panicMessage)
+				log.Error(err, err.Error())
+			}
+		}()
+
+		f()
+	}()
 }

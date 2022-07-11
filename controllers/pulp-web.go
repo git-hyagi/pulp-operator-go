@@ -32,8 +32,8 @@ import (
 	"github.com/go-logr/logr"
 )
 
-func (r *PulpReconciler) pulpWebController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger) (ctrl.Result, error) {
-
+func (r *PulpReconciler) pulpWebController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger, channel chan ctrl.Result) {
+	log.Info("====> Web Controller <====")
 	webConfigMap := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{Name: pulp.Name + "-configmap", Namespace: pulp.Namespace}, webConfigMap)
 
@@ -44,13 +44,12 @@ func (r *PulpReconciler) pulpWebController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, newWebConfigMap)
 		if err != nil {
 			log.Error(err, "Failed to create new Pulp Web ConfigMap", "ConfigMap.Namespace", newWebConfigMap.Namespace, "ConfigMap.Name", newWebConfigMap.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Pulp Web ConfigMap")
 		}
 		// ConfigMap created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Pulp Web ConfigMap")
-		return ctrl.Result{}, err
+		panic("Failed to get Pulp Web ConfigMap")
 	}
 
 	webDeployment := &appsv1.Deployment{}
@@ -63,13 +62,12 @@ func (r *PulpReconciler) pulpWebController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, newWebDeployment)
 		if err != nil {
 			log.Error(err, "Failed to create new Pulp Web Deployment", "Deployment.Namespace", newWebDeployment.Namespace, "Deployment.Name", newWebDeployment.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Pulp Web Deployment")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Pulp Web Deployment")
-		return ctrl.Result{}, err
+		panic("Failed to get Pulp Web Deployment")
 	}
 
 	// Ensure the deployment size is the same as the spec
@@ -80,12 +78,12 @@ func (r *PulpReconciler) pulpWebController(ctx context.Context, pulp *repomanage
 		err = r.Update(ctx, webDeployment)
 		if err != nil {
 			log.Error(err, "Failed to update Pulp Web Deployment", "Deployment.Namespace", webDeployment.Namespace, "Deployment.Name", webDeployment.Name)
-			return ctrl.Result{}, err
+			panic("Failed to update Pulp Web Deployment")
 		}
 		// Ask to requeue after 1 minute in order to give enough time for the
 		// pods be created on the cluster side and the operand be able
 		// to do the next update step accurately.
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
+		channel <- ctrl.Result{RequeueAfter: time.Minute}
 	}
 
 	// SERVICE
@@ -99,16 +97,15 @@ func (r *PulpReconciler) pulpWebController(ctx context.Context, pulp *repomanage
 		err = r.Create(ctx, newWebSvc)
 		if err != nil {
 			log.Error(err, "Failed to create new Web Service", "Service.Namespace", newWebSvc.Namespace, "Service.Name", newWebSvc.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Web Service")
 		}
 		// Service created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Web Service")
-		return ctrl.Result{}, err
+		panic("Failed to get Web Service")
 	}
-
-	return ctrl.Result{}, nil
+	log.Info("<==== Web Controller ====>")
+	channel <- ctrl.Result{}
 }
 
 // deploymentForPulpWeb returns a pulp-web Deployment object

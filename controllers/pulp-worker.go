@@ -32,7 +32,8 @@ import (
 	"github.com/go-logr/logr"
 )
 
-func (r *PulpReconciler) pulpWorkerController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger) (ctrl.Result, error) {
+func (r *PulpReconciler) pulpWorkerController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger, channel chan ctrl.Result) {
+	log.Info("====> Worker Controller <====")
 	workerDeployment := &appsv1.Deployment{}
 	err := r.Get(ctx, types.NamespacedName{Name: pulp.Name + "-worker", Namespace: pulp.Namespace}, workerDeployment)
 
@@ -43,13 +44,12 @@ func (r *PulpReconciler) pulpWorkerController(ctx context.Context, pulp *repoman
 		err = r.Create(ctx, newWorkerDeployment)
 		if err != nil {
 			log.Error(err, "Failed to create new Pulp Worker Deployment", "Deployment.Namespace", newWorkerDeployment.Namespace, "Deployment.Name", newWorkerDeployment.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Pulp Worker Deployment")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Pulp Worker Deployment")
-		return ctrl.Result{}, err
+		panic("Failed to get Pulp Worker Deployment")
 	}
 
 	// Ensure the deployment size is the same as the spec
@@ -60,15 +60,15 @@ func (r *PulpReconciler) pulpWorkerController(ctx context.Context, pulp *repoman
 		err = r.Update(ctx, workerDeployment)
 		if err != nil {
 			log.Error(err, "Failed to update Pulp Worker Deployment", "Deployment.Namespace", workerDeployment.Namespace, "Deployment.Name", workerDeployment.Name)
-			return ctrl.Result{}, err
+			panic("Failed to update Pulp Worker Deployment")
 		}
 		// Ask to requeue after 1 minute in order to give enough time for the
 		// pods be created on the cluster side and the operand be able
 		// to do the next update step accurately.
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
+		channel <- ctrl.Result{RequeueAfter: time.Minute}
 	}
-
-	return ctrl.Result{}, nil
+	log.Info("<==== Worker Controller ====>")
+	channel <- ctrl.Result{}
 }
 
 // deploymentForPulpWorker returns a pulp-worker Deployment object

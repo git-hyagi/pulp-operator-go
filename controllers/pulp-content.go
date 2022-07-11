@@ -35,7 +35,8 @@ import (
 	"github.com/go-logr/logr"
 )
 
-func (r *PulpReconciler) pulpContentController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger) (ctrl.Result, error) {
+func (r *PulpReconciler) pulpContentController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger, channel chan ctrl.Result) {
+	log.Info("====> Content Controller <====")
 	cntDeployment := &appsv1.Deployment{}
 	err := r.Get(ctx, types.NamespacedName{Name: pulp.Name + "-content", Namespace: pulp.Namespace}, cntDeployment)
 
@@ -46,13 +47,12 @@ func (r *PulpReconciler) pulpContentController(ctx context.Context, pulp *repoma
 		err = r.Create(ctx, newCntDeployment)
 		if err != nil {
 			log.Error(err, "Failed to create new Pulp Content Deployment", "Deployment.Namespace", newCntDeployment.Namespace, "Deployment.Name", newCntDeployment.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Pulp Content Deployment")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Pulp Content Deployment")
-		return ctrl.Result{}, err
+		panic("Failed to get Pulp Content Deployment")
 	}
 
 	// Ensure the deployment size is the same as the spec
@@ -63,12 +63,12 @@ func (r *PulpReconciler) pulpContentController(ctx context.Context, pulp *repoma
 		err = r.Update(ctx, cntDeployment)
 		if err != nil {
 			log.Error(err, "Failed to update Pulp Content Deployment", "Deployment.Namespace", cntDeployment.Namespace, "Deployment.Name", cntDeployment.Name)
-			return ctrl.Result{}, err
+			panic("Failed to update Pulp Content Deployment")
 		}
 		// Ask to requeue after 1 minute in order to give enough time for the
 		// pods be created on the cluster side and the operand be able
 		// to do the next update step accurately.
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
+		channel <- ctrl.Result{RequeueAfter: time.Minute}
 	}
 
 	// SERVICE
@@ -82,13 +82,12 @@ func (r *PulpReconciler) pulpContentController(ctx context.Context, pulp *repoma
 		err = r.Create(ctx, newCntSvc)
 		if err != nil {
 			log.Error(err, "Failed to create new Content Service", "Service.Namespace", newCntSvc.Namespace, "Service.Name", newCntSvc.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Content Service")
 		}
 		// Service created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Content Service")
-		return ctrl.Result{}, err
+		panic("Failed to get Content Service")
 	}
 
 	// Ensure the service spec is as expected
@@ -98,13 +97,12 @@ func (r *PulpReconciler) pulpContentController(ctx context.Context, pulp *repoma
 		log.Info("The Content service has been modified! Reconciling ...")
 		err = r.Update(ctx, serviceContentObject(pulp.Name, pulp.Namespace))
 		if err != nil {
-			log.Error(err, "Error trying to update the Content Service object ... ")
-			return reconcile.Result{}, err
+			panic("Error trying to update the Content Service object ... ")
 		}
-		return reconcile.Result{Requeue: true}, nil
+		channel <- reconcile.Result{Requeue: true}
 	}
-
-	return ctrl.Result{}, nil
+	log.Info("<==== Content Controller ====>")
+	channel <- ctrl.Result{}
 }
 
 // deploymentForPulpContent returns a pulp-content Deployment object

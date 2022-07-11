@@ -35,8 +35,9 @@ import (
 	"github.com/go-logr/logr"
 )
 
-func (r *PulpReconciler) databaseController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger) (ctrl.Result, error) {
+func (r *PulpReconciler) databaseController(ctx context.Context, pulp *repomanagerv1alpha1.Pulp, log logr.Logger, channel chan ctrl.Result) {
 
+	log.Info("====> Database Controller <====")
 	// Create pulp-postgres-configuration secret
 	pgConfigSecret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: pulp.Name + "-postgres-configuration", Namespace: pulp.Namespace}, pgConfigSecret)
@@ -48,13 +49,12 @@ func (r *PulpReconciler) databaseController(ctx context.Context, pulp *repomanag
 		err = r.Create(ctx, newPgConfigSecret)
 		if err != nil {
 			log.Error(err, "Failed to create new pulp-postgres-configuration secret secret", "Secret.Namespace", newPgConfigSecret.Namespace, "Secret.Name", newPgConfigSecret.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new pulp-postgres-configuration secret secret")
 		}
 		// Secret created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get pulp-postgres-configuration secret")
-		return ctrl.Result{}, err
+		panic("Failed to get pulp-postgres-configuration secret")
 	}
 
 	// DEPLOYMENT
@@ -68,13 +68,12 @@ func (r *PulpReconciler) databaseController(ctx context.Context, pulp *repomanag
 		err = r.Create(ctx, sts)
 		if err != nil {
 			log.Error(err, "Failed to create new Database StatefulSet", "StatefulSet.Namespace", sts.Namespace, "StatefulSet.Name", sts.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Database StatefulSet")
 		}
 		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Database StatefulSet")
-		return ctrl.Result{}, err
+		panic("Failed to get Database StatefulSet")
 	}
 
 	// SERVICE
@@ -88,13 +87,12 @@ func (r *PulpReconciler) databaseController(ctx context.Context, pulp *repomanag
 		err = r.Create(ctx, svc)
 		if err != nil {
 			log.Error(err, "Failed to create new Database Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
-			return ctrl.Result{}, err
+			panic("Failed to create new Database Service")
 		}
 		// Service created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
+		channel <- ctrl.Result{Requeue: true}
 	} else if err != nil {
-		log.Error(err, "Failed to get Database Service")
-		return ctrl.Result{}, err
+		panic("Failed to get Database Service")
 	}
 
 	// Ensure the service spec is as expected
@@ -104,13 +102,12 @@ func (r *PulpReconciler) databaseController(ctx context.Context, pulp *repomanag
 		log.Info("The Database service has been modified! Reconciling ...")
 		err = r.Update(ctx, serviceDBObject(pulp.Name, pulp.Namespace))
 		if err != nil {
-			log.Error(err, "Error trying to update the Database Service object ... ")
-			return reconcile.Result{}, err
+			panic("Error trying to update the Database Service object ... ")
 		}
-		return reconcile.Result{Requeue: true}, nil
+		channel <- reconcile.Result{Requeue: true}
 	}
-
-	return ctrl.Result{}, nil
+	log.Info("<==== Database Controller ====>")
+	channel <- ctrl.Result{}
 }
 
 // deploymentForDatabase returns a postgresql Deployment object

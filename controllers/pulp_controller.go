@@ -34,7 +34,8 @@ import (
 // PulpReconciler reconciles a Pulp object
 type PulpReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme  *runtime.Scheme
+	Channel chan ctrl.Result
 }
 
 //+kubebuilder:rbac:groups=repo-manager.pulpproject.org,resources=pulps,verbs=get;list;watch;create;update;patch;delete
@@ -71,31 +72,13 @@ func (r *PulpReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		log.Error(err, "Failed to get Pulp")
 		return ctrl.Result{}, err
 	}
+	SafeGo(log, func() { r.databaseController(ctx, pulp, log, r.Channel) })
+	SafeGo(log, func() { r.pulpApiController(ctx, pulp, log, r.Channel) })
+	SafeGo(log, func() { r.pulpContentController(ctx, pulp, log, r.Channel) })
+	SafeGo(log, func() { r.pulpWorkerController(ctx, pulp, log, r.Channel) })
+	SafeGo(log, func() { r.pulpWebController(ctx, pulp, log, r.Channel) })
 
-	pulpController, err := r.databaseController(ctx, pulp, log)
-	if err != nil {
-		return pulpController, err
-	}
-
-	pulpController, err = r.pulpApiController(ctx, pulp, log)
-	if err != nil {
-		return pulpController, err
-	}
-
-	pulpController, err = r.pulpContentController(ctx, pulp, log)
-	if err != nil {
-		return pulpController, err
-	}
-
-	pulpController, err = r.pulpWorkerController(ctx, pulp, log)
-	if err != nil {
-		return pulpController, err
-	}
-
-	pulpController, err = r.pulpWebController(ctx, pulp, log)
-	if err != nil {
-		return pulpController, err
-	}
+	pulpController := <-r.Channel
 
 	return pulpController, nil
 }
