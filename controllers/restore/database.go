@@ -24,23 +24,6 @@ func (r *PulpRestoreReconciler) restoreDatabaseData(ctx context.Context, pulpRes
 	// was in the middle of its "creation process" and this kludge did a "relief"
 	time.Sleep(5 * time.Second)
 
-	// scaling down pods
-	log.Info("Scaling down pods to restore postgres data ...")
-	pulp := &repomanagerv1alpha1.Pulp{}
-	if err := r.Get(ctx, types.NamespacedName{Name: pulpRestore.Spec.DeploymentName, Namespace: pulpRestore.Namespace}, pulp); err != nil {
-		log.Error(err, "Failed to retrieve "+pulpRestore.Spec.DeploymentName+" instance!")
-		return err
-	} else {
-		pulp.Spec.Api.Replicas = 0
-		pulp.Spec.Content.Replicas = 0
-		pulp.Spec.Worker.Replicas = 0
-		pulp.Spec.Web.Replicas = 0
-		if err := r.Update(ctx, pulp); err != nil {
-			log.Error(err, "Failed to scale down deployment replicas!")
-			return err
-		}
-	}
-
 	// retrieve pg credentials and address
 	pgConfig := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: pulpRestore.Status.PostgresSecret, Namespace: pulpRestore.Namespace}, pgConfig); err != nil {
@@ -64,9 +47,12 @@ func (r *PulpRestoreReconciler) restoreDatabaseData(ctx context.Context, pulpRes
 
 	// run pg_restore
 	execCmd := []string{
-		"pg_restore", "-d",
-		"postgresql://" + string(pgConfig.Data["username"]) + ":" + string(pgConfig.Data["password"]) + "@" + string(pgConfig.Data["host"]) + ":" + string(pgConfig.Data["port"]) + "/" + string(pgConfig.Data["database"]),
-		backupDir + "/" + backupFile,
+		"bash", "-c", "cat" + backupDir + "/" + backupFile + "| PGPASSWORD=" + string(pgConfig.Data["password"]),
+		"psql -U " + string(pgConfig.Data["username"]),
+		"-h " + string(pgConfig.Data["host"]),
+		"-U " + string(pgConfig.Data["username"]),
+		"-d " + string(pgConfig.Data["database"]),
+		"-p " + string(pgConfig.Data["port"]),
 	}
 
 	log.Info("Running db restore ...")
